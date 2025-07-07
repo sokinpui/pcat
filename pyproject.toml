@@ -1,0 +1,26 @@
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pcat-tool"
+version = "0.1.0"
+authors = [
+  { name="Your Name", email="you@example.com" },
+]
+description = "A simple tool to recursively print the content of files in a project, filtered by extension."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Topic :: Utilities",
+]
+
+[project.scripts]
+# This line creates the `pcat` command that runs the `run` function in your `main.py` file.
+pcat = "pcat.main:run"

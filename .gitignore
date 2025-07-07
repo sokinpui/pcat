@@ -1,0 +1,25 @@
+# .gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# IDE files
+.vscode/
+.idea/
+
+.envrc
+.direnv
