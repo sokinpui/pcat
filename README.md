@@ -1,8 +1,15 @@
 # pcat - Project Content Aggregator Tool
 
-To provide code context for LLM in plain text, especially those unable to parse file other than `.txt` and `.py`. Yes, I am talking about you, Ai studio.
+A versatile tool to concatenate source code from multiple directories and files, tailored for providing context to Large Language Models (LLMs).
 
-recursively print all files with specified extensions from given directories to stdout.
+## Features
+
+- Recursively scan multiple directories for files with specific extensions.
+- Concatenate an explicit list of individual files.
+- Combine directory scanning and file listing in a single command.
+- Optionally prepend each file's content with its path, commented out in the correct syntax for its file type.
+- Intelligently groups output by source directory.
+- Gracefully handles read errors and ignores unreadable files.
 
 ## Installation
 
@@ -14,22 +21,48 @@ pipx install .
 
 ## Usage
 
+The primary way to use `pcat` is by specifying directories to scan and file extensions to include. You can also add specific files and enable path comments.
+
 ### Syntax
 
-```
-pcat <dir1> [<dir2>...] <ext1> [<ext2>...]
+```sh
+pcat [-d DIR]... [EXTS]... [-l FILE]... [-p]
 ```
 
-### Example
+- `-d, --directory DIR`: A directory to scan. Can be used multiple times. Positional arguments that follow are treated as file extensions.
+- `-l, --list FILE`: A list of specific files to concatenate.
+- `-p, --with-paths`: Include file paths as comments at the top of each file's content.
+
+### Examples
+
+**1. Scan a Directory for Specific File Types**
 
 To print all `.ts`, `.tsx`, and `.css` files from the `frontend/src` directory:
 
 ```bash
-pcat ./frontend/src ts tsx css
+pcat -d ./frontend/src ts tsx css
 ```
 
-To print all Python (`.py`) and Markdown (`.md`) files from the current directory and a `tests/` directory:
+**2. Scan Multiple Directories and Add File Paths**
+
+To print all Python (`.py`) files from the `src/` and `tests/` directories, with path comments included, and save to a file:
 
 ```bash
-pcat . ./tests py md > project_context.txt
+pcat -p -d ./src -d ./tests py > project_context.txt
+```
+
+**3. Concatenate a Specific List of Files**
+
+To print the contents of `a.py` and `b.sh` regardless of their location:
+
+```bash
+pcat -l ./a.py ./b.sh
+```
+
+**4. Combine Directory Scanning and Listed Files**
+
+You can mix and match all options. Here, we scan the `src` directory for `.js` files, add the project's `README.md`, and include path comments for all of them:
+
+```bash
+pcat -p -d ./src js -l ./README.md
 ```

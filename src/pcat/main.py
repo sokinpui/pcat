@@ -44,14 +44,39 @@ COMMENT_STYLES = {
 DEFAULT_COMMENT_STYLE = "// {path}"
 
 
+def _append_file_to_output(file_path, with_paths, output_parts):
+    """
+    Reads a file and appends its formatted content to the output list.
+    Handles I/O errors and prints warnings.
+    """
+    try:
+        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        output_parts.append("```\n")
+
+        if with_paths:
+            extension = file_path.suffix.lstrip(".")
+            comment_format = COMMENT_STYLES.get(extension, DEFAULT_COMMENT_STYLE)
+            comment_line = comment_format.format(path=file_path)
+            output_parts.append(f"{comment_line}\n")
+
+        output_parts.append(content)
+        output_parts.append("\n```\n\n")
+    except IOError as e:
+        print(f"Warning: Could not read file {file_path}: {e}", file=sys.stderr)
+
+
 def parse_arguments(cli_args):
     """
     Parses command-line arguments using argparse.
     """
     parser = argparse.ArgumentParser(
-        description="Concatenate files from specified directories with given extensions.",
-        epilog="Example: pcat ./frontend/src ./backend/api ts tsx js",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Concatenate files from specified directories or a list of files.",
+        epilog="Examples:\n"
+        "  pcat -d ./src -d ./lib js ts   # Preferred: Scan directories for extensions\n"
+        "  pcat ./src ./lib js ts         # Legacy: Scan directories for extensions\n"
+        "  pcat -l ./a.py ./b.sh        # Concatenate a list of files\n"
+        "  pcat -d ./src js -l ./c.rs -p # Combine all options",
+        formatter_class=argparse.RawTextHelpFormatter,
     )
 
     parser.add_argument(
@@ -62,83 +87,129 @@ def parse_arguments(cli_args):
     )
 
     parser.add_argument(
+        "-l",
+        "--list",
+        nargs="+",
+        metavar="FILE",
+        default=[],
+        help="A list of specific files to concatenate.",
+    )
+
+    parser.add_argument(
+        "-d",
+        "--directory",
+        action="append",
+        metavar="DIR",
+        default=[],
+        help="A directory to scan. Can be used multiple times. If used, all positional arguments are treated as extensions.",
+    )
+
+    parser.add_argument(
         "args",
         nargs="*",
         metavar="ARG",
-        help="One or more directories, followed by one or more file extensions.",
+        help="File extensions. If -d is not used, this can be: one or more directories, followed by one or more file extensions.",
     )
 
     parsed_args = parser.parse_args(cli_args)
 
-    if not parsed_args.args:
+    if not parsed_args.directory and not parsed_args.args and not parsed_args.list:
         parser.print_help(sys.stderr)
         sys.exit(1)
 
-    # Separate directories from extensions
-    dirs_str = []
-    exts = []
-    split_index = len(parsed_args.args)
-    for i, arg in enumerate(parsed_args.args):
-        if not Path(arg).is_dir():
-            split_index = i
-            break
+    directories_str = []
+    extensions = []
 
-    dirs_str = parsed_args.args[:split_index]
-    exts = parsed_args.args[split_index:]
+    # If -d is used, all positional args are extensions. Otherwise, use legacy parsing.
+    if parsed_args.directory:
+        directories_str = parsed_args.directory
+        extensions = parsed_args.args
+    else:
+        # Legacy mode: separate positional args into directories and extensions
+        if parsed_args.args:
+            split_index = len(parsed_args.args)
+            for i, arg in enumerate(parsed_args.args):
+                if not Path(arg).is_dir():
+                    split_index = i
+                    break
+            directories_str = parsed_args.args[:split_index]
+            extensions = parsed_args.args[split_index:]
 
-    if not dirs_str:
-        first_arg = parsed_args.args[0] if parsed_args.args else ""
+    # Validation
+    if directories_str and not extensions:
         parser.error(
-            f"No valid directories were provided. The first argument '{first_arg}' is not a directory."
+            "Directories were provided, but no file extensions were specified."
         )
 
-    if not exts:
-        parser.error("No file extensions were provided.")
+    if not directories_str and extensions:
+        # This case happens if legacy parsing fails to find any directories.
+        first_arg = parsed_args.args[0] if parsed_args.args else ""
+        parser.error(
+            f"No valid directories were provided. The first positional argument '{first_arg}' is not a directory. Use -d to specify directories."
+        )
 
-    return [Path(d) for d in dirs_str], exts, parsed_args.with_paths
+    # Convert to Path objects and validate existence
+    directories = [Path(d) for d in directories_str]
+    for d_path in directories:
+        if not d_path.is_dir():
+            parser.error(
+                f"Directory specified not found or is not a directory: {d_path}"
+            )
+
+    listed_files = [Path(f) for f in parsed_args.list]
+    for f_path in listed_files:
+        if not f_path.is_file():
+            parser.error(
+                f"File specified in --list not found or is not a file: {f_path}"
+            )
+
+    return directories, extensions, listed_files, parsed_args.with_paths
 
 
-def generate_output(directories, extensions, with_paths):
+def generate_output(directories, extensions, listed_files, with_paths):
     """
     Generates the entire output string in memory before printing.
     """
     output_parts = []
+    processed_files = set()
 
+    # Part 1: Handle directory scanning
     for i, directory in enumerate(directories):
         output_parts.append(f"{directory}\n---\n")
 
-        found_files = set()
+        found_files_in_dir = set()
         for ext in extensions:
             clean_ext = ext if ext.startswith(".") else f".{ext}"
             pattern = f"**/*{clean_ext}"
-            found_files.update(directory.rglob(pattern))
+            found_files_in_dir.update(directory.rglob(pattern))
 
-        sorted_files = sorted([f for f in found_files if f.is_file()])
+        sorted_files = sorted([f for f in found_files_in_dir if f.is_file()])
 
         for file_path in sorted_files:
-            try:
-
-                content = file_path.read_text(encoding="utf-8", errors="ignore")
-                output_parts.append("```\n")
-
-                if with_paths:
-                    extension = file_path.suffix.lstrip(".")
-                    comment_format = COMMENT_STYLES.get(
-                        extension, DEFAULT_COMMENT_STYLE
-                    )
-                    comment_line = comment_format.format(path=file_path)
-                    output_parts.append(f"{comment_line}\n")
-
-                output_parts.append(content)
-                output_parts.append("\n```\n\n")  # Add all newlines for spacing
-            except IOError as e:
-                print(f"Warning: Could not read file {file_path}: {e}", file=sys.stderr)
+            resolved_path = file_path.resolve()
+            if resolved_path not in processed_files:
+                _append_file_to_output(file_path, with_paths, output_parts)
+                processed_files.add(resolved_path)
 
         if i < len(directories) - 1:
-            # Trim trailing newlines before adding the separator for cleaner spacing
             if output_parts and output_parts[-1].endswith("\n\n"):
                 output_parts[-1] = output_parts[-1][:-2]
             output_parts.append("---\n\n")
+
+    # Part 2: Handle listed files, ensuring they haven't been processed
+    unique_listed_files = [
+        f for f in listed_files if f.resolve() not in processed_files
+    ]
+
+    if unique_listed_files:
+        if directories:
+            if output_parts and output_parts[-1].endswith("\n\n"):
+                output_parts[-1] = output_parts[-1][:-2]
+            output_parts.append("---\n\n")
+
+        output_parts.append("Listed Files\n---\n")
+        for file_path in unique_listed_files:
+            _append_file_to_output(file_path, with_paths, output_parts)
 
     return "".join(output_parts)
 
@@ -147,14 +218,13 @@ def run():
     """
     The main entry point for the console script.
     """
-    directories, extensions, with_paths = parse_arguments(sys.argv[1:])
+    directories, extensions, listed_files, with_paths = parse_arguments(sys.argv[1:])
 
-    # 1. Generate the entire output in memory
-    full_output = generate_output(directories, extensions, with_paths)
+    full_output = generate_output(directories, extensions, listed_files, with_paths)
 
-    # 2. Print it all in one go
     try:
-        print(full_output, end="")
+        if full_output:
+            print(full_output, end="")
     except BrokenPipeError:
         # This happens if the user pipes the output to a command like `head`
         # and that command closes the pipe early. It's not a real error.
