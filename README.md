@@ -1,6 +1,6 @@
 # pcat - Project Content Aggregator Tool
 
-A versatile tool to concatenate source code from multiple directories and files, tailored for providing context to Large Language Models (LLMs).
+A tool to concatenate source code from multiple directories and files, tailored for providing context to Large Language Models (LLMs). Don't relay on `upload files` feature of LLM providers' web UI. Why AI studio doesn't support `.js` files upload?
 
 ## Features
 
