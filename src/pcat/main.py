@@ -13,16 +13,17 @@ def _append_file_to_output(file_path, with_paths, output_parts):
         content = file_path.read_text(encoding="utf-8", errors="ignore")
 
         if with_paths:
-            output_parts.append(f'<file path="{file_path}">\n')
-        else:
-            output_parts.append("<file>\n")
+            output_parts.append(f"`{file_path}`:\n")
 
+        # get the extension of the file
+        ext = file_path.suffix[1:] if file_path.suffix else "txt"
+        output_parts.append(f"```{ext}\n")
         output_parts.append(content)
 
         if not content.endswith("\n"):
             output_parts.append("\n")
 
-        output_parts.append("</file>\n\n")
+        output_parts.append("```\n\n")
     except IOError as e:
         print(f"Warning: Could not read file {file_path}: {e}", file=sys.stderr)
 
