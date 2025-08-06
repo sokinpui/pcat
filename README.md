@@ -43,6 +43,24 @@ To print all `.ts`, `.tsx`, and `.css` files from the `frontend/src` directory:
 pcat -d ./frontend/src ts tsx css
 ```
 
+_Output format:_
+
+```md
+### SOURCE CODE
+
+<file>
+// content of a .ts file
+</file>
+
+<file>
+/* content of a .css file */
+</file>
+
+...
+
+### SOURCE CODE END
+```
+
 **2. Scan Multiple Directories and Add File Paths**
 
 To print all Python (`.py`) files from the `src/` and `tests/` directories, with path comments included, and save to a file:

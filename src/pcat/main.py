@@ -193,7 +193,7 @@ def generate_output(directories, extensions, listed_files, with_paths, hidden):
         # Remove final two newlines from the last file entry
         if output_parts[-1].endswith("\n\n"):
             output_parts[-1] = output_parts[-1][:-1]
-        output_parts.append("### SOURCE CODE END ###\n")
+        output_parts.append("\n### SOURCE CODE END ###\n")
 
     return "".join(output_parts)
 
