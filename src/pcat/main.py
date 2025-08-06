@@ -40,8 +40,13 @@ COMMENT_STYLES = {
     "ini": "; {path}",
     "conf": "# {path}",
     "cfg": "# {path}",
+    # New file types
+    "md": "<!-- {path} -->",
+    "json": "// {path}",
+    "txt": "# {path}",
+    "log": "# {path}",
 }
-DEFAULT_COMMENT_STYLE = "// {path}"
+DEFAULT_COMMENT_STYLE = "# {path}"
 
 
 def _append_file_to_output(file_path, with_paths, output_parts):
@@ -108,7 +113,7 @@ def parse_arguments(cli_args):
         "args",
         nargs="*",
         metavar="ARG",
-        help="File extensions. If -d is not used, this can be: one or more directories, followed by one or more file extensions.",
+        help="File extensions or a generic file type 'any'. If -d is not used, this can be: one or more directories, followed by one or more file extensions.",
     )
 
     parsed_args = parser.parse_args(cli_args)
@@ -178,10 +183,13 @@ def generate_output(directories, extensions, listed_files, with_paths):
         output_parts.append(f"{directory}\n---\n")
 
         found_files_in_dir = set()
-        for ext in extensions:
-            clean_ext = ext if ext.startswith(".") else f".{ext}"
-            pattern = f"**/*{clean_ext}"
-            found_files_in_dir.update(directory.rglob(pattern))
+        if "any" in extensions:
+            found_files_in_dir.update(directory.rglob("*"))
+        else:
+            for ext in extensions:
+                clean_ext = ext if ext.startswith(".") else f".{ext}"
+                pattern = f"**/*{clean_ext}"
+                found_files_in_dir.update(directory.rglob(pattern))
 
         sorted_files = sorted([f for f in found_files_in_dir if f.is_file()])
 
