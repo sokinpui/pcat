@@ -1,52 +1,7 @@
 # src/pcat/main.py
-
 import argparse
 import sys
 from pathlib import Path
-
-# Dictionary mapping file extensions to their comment syntax.
-# The value is a format string where '{path}' will be replaced by the file path.
-COMMENT_STYLES = {
-    # Scripting & Programming Languages
-    "py": "# {path}",
-    "sh": "# {path}",
-    "rb": "# {path}",
-    "pl": "# {path}",
-    "js": "// {path}",
-    "ts": "// {path}",
-    "jsx": "// {path}",
-    "tsx": "// {path}",
-    "go": "// {path}",
-    "java": "// {path}",
-    "c": "// {path}",
-    "cpp": "// {path}",
-    "cs": "// {path}",
-    "rs": "// {path}",
-    "swift": "// {path}",
-    "kt": "// {path}",
-    "scala": "// {path}",
-    "php": "// {path}",
-    "lua": "-- {path}",
-    "sql": "-- {path}",
-    # Markup & Styling
-    "html": "<!-- {path} -->",
-    "xml": "<!-- {path} -->",
-    "css": "/* {path} */",
-    "scss": "/* {path} */",
-    # Config & Data
-    "yaml": "# {path}",
-    "yml": "# {path}",
-    "toml": "# {path}",
-    "ini": "; {path}",
-    "conf": "# {path}",
-    "cfg": "# {path}",
-    # New file types
-    "md": "<!-- {path} -->",
-    "json": "// {path}",
-    "txt": "# {path}",
-    "log": "# {path}",
-}
-DEFAULT_COMMENT_STYLE = "# {path}"
 
 
 def _append_file_to_output(file_path, with_paths, output_parts):
@@ -56,16 +11,18 @@ def _append_file_to_output(file_path, with_paths, output_parts):
     """
     try:
         content = file_path.read_text(encoding="utf-8", errors="ignore")
-        output_parts.append("```\n")
 
         if with_paths:
-            extension = file_path.suffix.lstrip(".")
-            comment_format = COMMENT_STYLES.get(extension, DEFAULT_COMMENT_STYLE)
-            comment_line = comment_format.format(path=file_path)
-            output_parts.append(f"{comment_line}\n")
+            output_parts.append(f'<file path="{file_path}">\n')
+        else:
+            output_parts.append("<file>\n")
 
         output_parts.append(content)
-        output_parts.append("\n```\n\n")
+
+        if not content.endswith("\n"):
+            output_parts.append("\n")
+
+        output_parts.append("</file>\n\n")
     except IOError as e:
         print(f"Warning: Could not read file {file_path}: {e}", file=sys.stderr)
 
@@ -80,7 +37,7 @@ def parse_arguments(cli_args):
         "  pcat -d ./src -d ./lib js ts   # Preferred: Scan directories for extensions\n"
         "  pcat ./src ./lib js ts         # Legacy: Scan directories for extensions\n"
         "  pcat -l ./a.py ./b.sh        # Concatenate a list of files\n"
-        "  pcat -d ./src js -l ./c.rs -p # Combine all options\n"
+        "  pcat -d ./src js -l ./c.rs -p # Combine all options, adding path attributes\n"
         "  pcat -d ./src any --hidden   # Include hidden files (dotfiles)",
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -89,7 +46,7 @@ def parse_arguments(cli_args):
         "-p",
         "--with-paths",
         action="store_true",
-        help="Include file paths as comments in the output.",
+        help="Include file paths as a 'path' attribute in the <file> tag.",
     )
 
     parser.add_argument(
@@ -183,12 +140,11 @@ def generate_output(directories, extensions, listed_files, with_paths, hidden):
     """
     Generates the entire output string in memory before printing.
     """
-    output_parts = []
     processed_files = set()
+    files_to_process = []
 
-    for i, directory in enumerate(directories):
-        output_parts.append(f"{directory}\n---\n")
-
+    # Gather files from directories
+    for directory in directories:
         found_files_in_dir = set()
         patterns = []
         if "any" in extensions:
@@ -205,40 +161,39 @@ def generate_output(directories, extensions, listed_files, with_paths, hidden):
         if not hidden:
             filtered_files = set()
             for f in found_files_in_dir:
-                # Check if any part of the path relative to the base directory starts with a dot.
-                # This correctly handles files like 'project/.git/config' and 'project/.env'.
                 if not any(
                     part.startswith(".") for part in f.relative_to(directory).parts
                 ):
                     filtered_files.add(f)
             found_files_in_dir = filtered_files
 
-        sorted_files = sorted([f for f in found_files_in_dir if f.is_file()])
+        files_to_process.extend(sorted([f for f in found_files_in_dir if f.is_file()]))
 
-        for file_path in sorted_files:
-            resolved_path = file_path.resolve()
-            if resolved_path not in processed_files:
-                _append_file_to_output(file_path, with_paths, output_parts)
-                processed_files.add(resolved_path)
+    # Add listed files
+    files_to_process.extend(listed_files)
 
-        if i < len(directories) - 1:
-            if output_parts and output_parts[-1].endswith("\n\n"):
-                output_parts[-1] = output_parts[-1][:-2]
-            output_parts.append("---\n\n")
+    # Create a final, unique list of files to process
+    final_files = []
+    for file_path in files_to_process:
+        resolved_path = file_path.resolve()
+        if resolved_path not in processed_files:
+            final_files.append(file_path)
+            processed_files.add(resolved_path)
 
-    unique_listed_files = [
-        f for f in listed_files if f.resolve() not in processed_files
-    ]
+    if not final_files:
+        return ""
 
-    if unique_listed_files:
-        if directories:
-            if output_parts and output_parts[-1].endswith("\n\n"):
-                output_parts[-1] = output_parts[-1][:-2]
-            output_parts.append("---\n\n")
+    output_parts = ["### SOURCE CODE ###\n\n"]
 
-        output_parts.append("Listed Files\n---\n")
-        for file_path in unique_listed_files:
-            _append_file_to_output(file_path, with_paths, output_parts)
+    for file_path in final_files:
+        _append_file_to_output(file_path, with_paths, output_parts)
+
+    # Clean up trailing newlines and add the end marker
+    if len(output_parts) > 1:
+        # Remove final two newlines from the last file entry
+        if output_parts[-1].endswith("\n\n"):
+            output_parts[-1] = output_parts[-1][:-1]
+        output_parts.append("### SOURCE CODE END ###\n")
 
     return "".join(output_parts)
 
