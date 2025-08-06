@@ -80,7 +80,8 @@ def parse_arguments(cli_args):
         "  pcat -d ./src -d ./lib js ts   # Preferred: Scan directories for extensions\n"
         "  pcat ./src ./lib js ts         # Legacy: Scan directories for extensions\n"
         "  pcat -l ./a.py ./b.sh        # Concatenate a list of files\n"
-        "  pcat -d ./src js -l ./c.rs -p # Combine all options",
+        "  pcat -d ./src js -l ./c.rs -p # Combine all options\n"
+        "  pcat -d ./src any --hidden   # Include hidden files (dotfiles)",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
@@ -89,6 +90,12 @@ def parse_arguments(cli_args):
         "--with-paths",
         action="store_true",
         help="Include file paths as comments in the output.",
+    )
+
+    parser.add_argument(
+        "--hidden",
+        action="store_true",
+        help="Include hidden files and directories (those starting with a dot).",
     )
 
     parser.add_argument(
@@ -113,7 +120,7 @@ def parse_arguments(cli_args):
         "args",
         nargs="*",
         metavar="ARG",
-        help="File extensions or a generic file type 'any'. If -d is not used, this can be: one or more directories, followed by one or more file extensions.",
+        help="File extensions or 'any'. If -d is not used, this can be: one or more directories, followed by one or more file extensions.",
     )
 
     parsed_args = parser.parse_args(cli_args)
@@ -125,12 +132,10 @@ def parse_arguments(cli_args):
     directories_str = []
     extensions = []
 
-    # If -d is used, all positional args are extensions. Otherwise, use legacy parsing.
     if parsed_args.directory:
         directories_str = parsed_args.directory
         extensions = parsed_args.args
     else:
-        # Legacy mode: separate positional args into directories and extensions
         if parsed_args.args:
             split_index = len(parsed_args.args)
             for i, arg in enumerate(parsed_args.args):
@@ -140,20 +145,17 @@ def parse_arguments(cli_args):
             directories_str = parsed_args.args[:split_index]
             extensions = parsed_args.args[split_index:]
 
-    # Validation
     if directories_str and not extensions:
         parser.error(
             "Directories were provided, but no file extensions were specified."
         )
 
     if not directories_str and extensions:
-        # This case happens if legacy parsing fails to find any directories.
         first_arg = parsed_args.args[0] if parsed_args.args else ""
         parser.error(
             f"No valid directories were provided. The first positional argument '{first_arg}' is not a directory. Use -d to specify directories."
         )
 
-    # Convert to Path objects and validate existence
     directories = [Path(d) for d in directories_str]
     for d_path in directories:
         if not d_path.is_dir():
@@ -168,28 +170,48 @@ def parse_arguments(cli_args):
                 f"File specified in --list not found or is not a file: {f_path}"
             )
 
-    return directories, extensions, listed_files, parsed_args.with_paths
+    return (
+        directories,
+        extensions,
+        listed_files,
+        parsed_args.with_paths,
+        parsed_args.hidden,
+    )
 
 
-def generate_output(directories, extensions, listed_files, with_paths):
+def generate_output(directories, extensions, listed_files, with_paths, hidden):
     """
     Generates the entire output string in memory before printing.
     """
     output_parts = []
     processed_files = set()
 
-    # Part 1: Handle directory scanning
     for i, directory in enumerate(directories):
         output_parts.append(f"{directory}\n---\n")
 
         found_files_in_dir = set()
+        patterns = []
         if "any" in extensions:
-            found_files_in_dir.update(directory.rglob("*"))
+            patterns.append("**/*")
         else:
             for ext in extensions:
                 clean_ext = ext if ext.startswith(".") else f".{ext}"
-                pattern = f"**/*{clean_ext}"
-                found_files_in_dir.update(directory.rglob(pattern))
+                patterns.append(f"**/*{clean_ext}")
+
+        for pattern in patterns:
+            found_files_in_dir.update(directory.rglob(pattern))
+
+        # Filter out hidden files/directories unless --hidden is used
+        if not hidden:
+            filtered_files = set()
+            for f in found_files_in_dir:
+                # Check if any part of the path relative to the base directory starts with a dot.
+                # This correctly handles files like 'project/.git/config' and 'project/.env'.
+                if not any(
+                    part.startswith(".") for part in f.relative_to(directory).parts
+                ):
+                    filtered_files.add(f)
+            found_files_in_dir = filtered_files
 
         sorted_files = sorted([f for f in found_files_in_dir if f.is_file()])
 
@@ -204,7 +226,6 @@ def generate_output(directories, extensions, listed_files, with_paths):
                 output_parts[-1] = output_parts[-1][:-2]
             output_parts.append("---\n\n")
 
-    # Part 2: Handle listed files, ensuring they haven't been processed
     unique_listed_files = [
         f for f in listed_files if f.resolve() not in processed_files
     ]
@@ -226,16 +247,17 @@ def run():
     """
     The main entry point for the console script.
     """
-    directories, extensions, listed_files, with_paths = parse_arguments(sys.argv[1:])
-
-    full_output = generate_output(directories, extensions, listed_files, with_paths)
+    directories, extensions, listed_files, with_paths, hidden = parse_arguments(
+        sys.argv[1:]
+    )
+    full_output = generate_output(
+        directories, extensions, listed_files, with_paths, hidden
+    )
 
     try:
         if full_output:
             print(full_output, end="")
     except BrokenPipeError:
-        # This happens if the user pipes the output to a command like `head`
-        # and that command closes the pipe early. It's not a real error.
         try:
             sys.stderr.close()
         except IOError:
