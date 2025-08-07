@@ -13,7 +13,7 @@ def _append_file_to_output(file_path, with_paths, output_parts):
         content = file_path.read_text(encoding="utf-8", errors="ignore")
 
         if with_paths:
-            output_parts.append(f"`{file_path}`:\n")
+            output_parts.append(f"`{file_path}`\n")
 
         # get the extension of the file
         ext = file_path.suffix[1:] if file_path.suffix else "txt"
