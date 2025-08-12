@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 
-def _append_file_to_output(file_path, with_paths, output_parts):
+def _append_file_to_output(file_path, with_paths, with_line_numbers, output_parts):
     """
     Reads a file and appends its formatted content to the output list.
     Handles I/O errors and prints warnings.
@@ -14,6 +14,10 @@ def _append_file_to_output(file_path, with_paths, output_parts):
 
         if with_paths:
             output_parts.append(f"`{file_path}`\n")
+
+        if with_line_numbers:
+            lines = content.splitlines()
+            content = "\n".join(f"{i+1: >4} | {line}" for i, line in enumerate(lines))
 
         # get the extension of the file
         ext = file_path.suffix[1:] if file_path.suffix else "txt"
@@ -39,7 +43,8 @@ def parse_arguments(cli_args):
         "  pcat ./src ./lib js ts         # Legacy: Scan directories for extensions\n"
         "  pcat -l ./a.py ./b.sh        # Concatenate a list of files\n"
         "  pcat -d ./src js -l ./c.rs -p # Combine all options, adding path attributes\n"
-        "  pcat -d ./src any --hidden   # Include hidden files (dotfiles)",
+        "  pcat -d ./src any --hidden   # Include hidden files (dotfiles)\n"
+        "  pcat -d ./src py -n          # Print python files with line numbers",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
@@ -48,6 +53,13 @@ def parse_arguments(cli_args):
         "--with-paths",
         action="store_true",
         help="Include file paths as a 'path' attribute in the <file> tag.",
+    )
+
+    parser.add_argument(
+        "-n",
+        "--with-line-numbers",
+        action="store_true",
+        help="Include line numbers for each file.",
     )
 
     parser.add_argument(
@@ -134,10 +146,13 @@ def parse_arguments(cli_args):
         listed_files,
         parsed_args.with_paths,
         parsed_args.hidden,
+        parsed_args.with_line_numbers,
     )
 
 
-def generate_output(directories, extensions, listed_files, with_paths, hidden):
+def generate_output(
+    directories, extensions, listed_files, with_paths, hidden, with_line_numbers
+):
     """
     Generates the entire output string in memory before printing.
     """
@@ -187,7 +202,7 @@ def generate_output(directories, extensions, listed_files, with_paths, hidden):
     output_parts = ["### SOURCE CODE ###\n\n"]
 
     for file_path in final_files:
-        _append_file_to_output(file_path, with_paths, output_parts)
+        _append_file_to_output(file_path, with_paths, with_line_numbers, output_parts)
 
     # Clean up trailing newlines and add the end marker
     if len(output_parts) > 1:
@@ -203,11 +218,16 @@ def run():
     """
     The main entry point for the console script.
     """
-    directories, extensions, listed_files, with_paths, hidden = parse_arguments(
-        sys.argv[1:]
-    )
+    (
+        directories,
+        extensions,
+        listed_files,
+        with_paths,
+        hidden,
+        with_line_numbers,
+    ) = parse_arguments(sys.argv[1:])
     full_output = generate_output(
-        directories, extensions, listed_files, with_paths, hidden
+        directories, extensions, listed_files, with_paths, hidden, with_line_numbers
     )
 
     try:
