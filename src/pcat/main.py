@@ -37,14 +37,15 @@ def parse_arguments(cli_args):
     Parses command-line arguments using argparse.
     """
     parser = argparse.ArgumentParser(
-        description="Concatenate files from specified directories or a list of files.",
+        description="Concatenate or list files from specified directories or a list of files.",
         epilog="Examples:\n"
         "  pcat -d ./src -d ./lib js ts   # Preferred: Scan directories for extensions\n"
         "  pcat ./src ./lib js ts         # Legacy: Scan directories for extensions\n"
-        "  pcat -l ./a.py ./b.sh        # Concatenate a list of files\n"
-        "  pcat -d ./src js -l ./c.rs -p # Combine all options, adding path attributes\n"
+        "  pcat -f ./a.py ./b.sh        # Concatenate a list of files\n"
+        "  pcat -d ./src js -f ./c.rs -p # Combine all options, adding path attributes\n"
         "  pcat -d ./src any --hidden   # Include hidden files (dotfiles)\n"
-        "  pcat -d ./src py -n          # Print python files with line numbers",
+        "  pcat -d ./src py -n          # Print python files with line numbers\n"
+        "  pcat -d ./src py -l          # List python files instead of printing content",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
@@ -71,8 +72,17 @@ def parse_arguments(cli_args):
     parser.add_argument(
         "-l",
         "--list",
+        action="store_true",
+        dest="list_only",
+        help="List the files that would be processed, without printing their content.",
+    )
+
+    parser.add_argument(
+        "-f",
+        "--file",
         nargs="+",
         metavar="FILE",
+        dest="file_list",
         default=[],
         help="A list of specific files to concatenate.",
     )
@@ -95,7 +105,7 @@ def parse_arguments(cli_args):
 
     parsed_args = parser.parse_args(cli_args)
 
-    if not parsed_args.directory and not parsed_args.args and not parsed_args.list:
+    if not parsed_args.directory and not parsed_args.args and not parsed_args.file_list:
         parser.print_help(sys.stderr)
         sys.exit(1)
 
@@ -133,11 +143,11 @@ def parse_arguments(cli_args):
                 f"Directory specified not found or is not a directory: {d_path}"
             )
 
-    listed_files = [Path(f) for f in parsed_args.list]
+    listed_files = [Path(f) for f in parsed_args.file_list]
     for f_path in listed_files:
         if not f_path.is_file():
             parser.error(
-                f"File specified in --list not found or is not a file: {f_path}"
+                f"File specified in --file not found or is not a file: {f_path}"
             )
 
     return (
@@ -147,14 +157,13 @@ def parse_arguments(cli_args):
         parsed_args.with_paths,
         parsed_args.hidden,
         parsed_args.with_line_numbers,
+        parsed_args.list_only,
     )
 
 
-def generate_output(
-    directories, extensions, listed_files, with_paths, hidden, with_line_numbers
-):
+def _collect_files(directories, extensions, listed_files, hidden):
     """
-    Generates the entire output string in memory before printing.
+    Gathers and returns a unique, sorted list of files to be processed.
     """
     processed_files = set()
     files_to_process = []
@@ -188,7 +197,7 @@ def generate_output(
     # Add listed files
     files_to_process.extend(listed_files)
 
-    # Create a final, unique list of files to process
+    # Create a final, unique list of files to process, preserving order for listed files
     final_files = []
     for file_path in files_to_process:
         resolved_path = file_path.resolve()
@@ -196,6 +205,13 @@ def generate_output(
             final_files.append(file_path)
             processed_files.add(resolved_path)
 
+    return final_files
+
+
+def generate_output(final_files, with_paths, with_line_numbers):
+    """
+    Generates the entire output string in memory before printing.
+    """
     if not final_files:
         return ""
 
@@ -225,10 +241,17 @@ def run():
         with_paths,
         hidden,
         with_line_numbers,
+        list_only,
     ) = parse_arguments(sys.argv[1:])
-    full_output = generate_output(
-        directories, extensions, listed_files, with_paths, hidden, with_line_numbers
-    )
+
+    final_files = _collect_files(directories, extensions, listed_files, hidden)
+
+    if list_only:
+        if final_files:
+            print("\n".join(str(f) for f in final_files))
+        return
+
+    full_output = generate_output(final_files, with_paths, with_line_numbers)
 
     try:
         if full_output:
