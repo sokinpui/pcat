@@ -30,7 +30,7 @@ pcat [-d DIR]... [EXTS]... [-l FILE]... [-p]
 ```
 
 - `-d, --directory DIR`: A directory to scan. Can be used multiple times. Positional arguments that follow are treated as file extensions.
-- `-l, --list FILE`: A list of specific files to concatenate.
+- `-f, --file FILE`: A list of specific files to concatenate.
 - `-p, --with-paths`: Include file paths as comments at the top of each file's content.
 
 ### Examples
@@ -74,7 +74,7 @@ pcat -p -d ./src -d ./tests py > project_context.txt
 To print the contents of `a.py` and `b.sh` regardless of their location:
 
 ```bash
-pcat -l ./a.py ./b.sh
+pcat -f ./a.py ./b.sh
 ```
 
 **4. Combine Directory Scanning and Listed Files**
@@ -82,5 +82,5 @@ pcat -l ./a.py ./b.sh
 You can mix and match all options. Here, we scan the `src` directory for `.js` files, add the project's `README.md`, and include path comments for all of them:
 
 ```bash
-pcat -p -d ./src js -l ./README.md
+pcat -p -d ./src js -f ./README.md
 ```
