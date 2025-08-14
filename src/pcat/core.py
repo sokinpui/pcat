@@ -110,7 +110,7 @@ class CliParser:
             epilog="Examples:\n"
             "  pcat -d ./src -d ./lib js ts   # Preferred: Scan directories for extensions\n"
             "  pcat ./src ./lib js ts         # Legacy: Scan directories for extensions\n"
-            "  pcat -l ./a.py ./b.sh        # Concatenate a list of files\n"
+            "  pcat -f ./a.py ./b.sh        # Concatenate a list of files\n"
             "  pcat -d ./src js -l ./c.rs -p # Combine all options, adding path attributes\n"
             "  pcat -d ./src any --hidden   # Include hidden files (dotfiles)\n"
             "  pcat -d ./src py -n          # Print python files with line numbers",
