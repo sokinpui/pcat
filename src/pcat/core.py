@@ -107,7 +107,7 @@ class CliParser:
         parser = argparse.ArgumentParser(
             description="Concatenate files from specified directories or a list of files.",
             epilog="Examples:\n"
-            "  pcat -d ./src -d ./lib js ts # Scan directories for specified file extensions\n"
+            "  pcat -d ./src ./lib js ts    # Scan directories for specified file extensions\n"
             "  pcat ./src ./lib js ts       # Scan directories for extensions (legacy syntax)\n"
             "  pcat -f ./a.py ./b.sh      # Concatenate a specific list of files\n"
             "  pcat -d ./src js -f ./c.rs # Combine directory scanning and specific files\n"
@@ -144,10 +144,11 @@ class CliParser:
         parser.add_argument(
             "-d",
             "--directory",
-            action="append",
+            nargs="+",
+            action="extend",
             metavar="DIR",
             default=[],
-            help="A directory to scan. Can be used multiple times. If used, all positional arguments are treated as extensions.",
+            help="One or more directories to scan. Can be used multiple times. If used, all positional arguments are treated as extensions.",
         )
         parser.add_argument(
             "args",
