@@ -9,13 +9,12 @@ from typing import List, Set, TextIO
 @dataclass(frozen=True)
 class PcatConfig:
     """Immutable configuration for the pcat tool."""
-
     directories: List[Path] = field(default_factory=list)
     extensions: List[str] = field(default_factory=list)
-    listed_files: List[Path] = field(default_factory=list)
-    with_paths: bool = False
+    specific_files: List[Path] = field(default_factory=list)
     with_line_numbers: bool = False
     hidden: bool = False
+    list_only: bool = False
 
 
 class CliParser:
@@ -28,14 +27,14 @@ class CliParser:
         """Parses arguments and performs validation, returning a config object."""
         parsed_args = self.parser.parse_args(cli_args)
 
-        if not parsed_args.directory and not parsed_args.args and not parsed_args.list:
+        if not parsed_args.directory and not parsed_args.args and not parsed_args.file:
             self.parser.print_help(sys.stderr)
             sys.exit(1)
 
         directories_str, extensions = self._resolve_dirs_and_exts(parsed_args)
 
         directories = self._validate_directories(directories_str)
-        listed_files = self._validate_files(parsed_args.list)
+        specific_files = self._validate_files(parsed_args.file)
 
         if directories and not extensions:
             self.parser.error(
@@ -45,10 +44,10 @@ class CliParser:
         return PcatConfig(
             directories=directories,
             extensions=extensions,
-            listed_files=listed_files,
-            with_paths=parsed_args.with_paths,
+            specific_files=specific_files,
             hidden=parsed_args.hidden,
             with_line_numbers=parsed_args.with_line_numbers,
+            list_only=parsed_args.list,
         )
 
     def _resolve_dirs_and_exts(
@@ -97,7 +96,7 @@ class CliParser:
             f_path = Path(f_str)
             if not f_path.is_file():
                 self.parser.error(
-                    f"File specified in --list not found or is not a file: {f_path}"
+                    f"File specified in --file not found or is not a file: {f_path}"
                 )
             validated_paths.append(f_path)
         return validated_paths
@@ -108,19 +107,14 @@ class CliParser:
         parser = argparse.ArgumentParser(
             description="Concatenate files from specified directories or a list of files.",
             epilog="Examples:\n"
-            "  pcat -d ./src -d ./lib js ts   # Preferred: Scan directories for extensions\n"
-            "  pcat ./src ./lib js ts         # Legacy: Scan directories for extensions\n"
-            "  pcat -f ./a.py ./b.sh        # Concatenate a list of files\n"
-            "  pcat -d ./src js -l ./c.rs -p # Combine all options, adding path attributes\n"
-            "  pcat -d ./src any --hidden   # Include hidden files (dotfiles)\n"
-            "  pcat -d ./src py -n          # Print python files with line numbers",
+            "  pcat -d ./src -d ./lib js ts # Scan directories for specified file extensions\n"
+            "  pcat ./src ./lib js ts       # Scan directories for extensions (legacy syntax)\n"
+            "  pcat -f ./a.py ./b.sh      # Concatenate a specific list of files\n"
+            "  pcat -d ./src js -f ./c.rs # Combine directory scanning and specific files\n"
+            "  pcat -d ./src js --list      # List files that would be processed, without content\n"
+            "  pcat -d ./src any --hidden # Include hidden files (dotfiles) in scan\n"
+            "  pcat -d ./src py -n        # Print python files with line numbers",
             formatter_class=argparse.RawTextHelpFormatter,
-        )
-        parser.add_argument(
-            "-p",
-            "--with-paths",
-            action="store_true",
-            help="Include file paths as a 'path' attribute in the <file> tag.",
         )
         parser.add_argument(
             "-n",
@@ -134,12 +128,18 @@ class CliParser:
             help="Include hidden files and directories (those starting with a dot).",
         )
         parser.add_argument(
-            "-l",
-            "--list",
+            "-f",
+            "--file",
             nargs="+",
             metavar="FILE",
             default=[],
             help="A list of specific files to concatenate.",
+        )
+        parser.add_argument(
+            "-l",
+            "--list",
+            action="store_true",
+            help="List the files that would be processed, without printing content.",
         )
         parser.add_argument(
             "-d",
@@ -233,8 +233,7 @@ class OutputFormatter:
         try:
             content = file_path.read_text(encoding="utf-8", errors="ignore")
 
-            if self.config.with_paths:
-                output_parts.append(f"`{file_path}`\n")
+            output_parts.append(f"`{file_path}`\n")
 
             if self.config.with_line_numbers:
                 lines = content.splitlines()
@@ -265,7 +264,12 @@ class Pcat:
         finder = FileFinder(self.config)
         directory_files = finder.find()
 
-        all_files = self._deduplicate_files(directory_files + self.config.listed_files)
+        all_files = self._deduplicate_files(
+            directory_files + self.config.specific_files
+        )
+
+        if self.config.list_only:
+            return "\n".join(map(str, all_files)) + ("\n" if all_files else "")
 
         formatter = OutputFormatter(self.config)
         return formatter.format(all_files)
