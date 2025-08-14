@@ -2,85 +2,40 @@
 
 A tool to concatenate source code from multiple directories and files, tailored for providing context to Large Language Models (LLMs). Don't relay on `upload files` feature of LLM providers' web UI. Why AI studio doesn't support `.js` files upload?
 
-## Features
-
-- Recursively scan multiple directories for files with specific extensions.
-- Concatenate an explicit list of individual files.
-- Combine directory scanning and file listing in a single command.
-- Optionally prepend each file's content with its path, commented out in the correct syntax for its file type.
-- Intelligently groups output by source directory.
-- Gracefully handles read errors and ignores unreadable files.
-
-## Installation
-
-```sh
-git clone https://github.com/sokinpui/pcat.git
-cd pcat
-pipx install .
 ```
+usage: pcat [-h] [-n] [--hidden] [-f FILE [FILE ...]] [-l] [-d DIR [DIR ...]]
+            [-e EXT [EXT ...]]
+            [ARG ...]
 
-## Usage
+Concatenate files from specified directories or a list of files.
 
-The primary way to use `pcat` is by specifying directories to scan and file extensions to include. You can also add specific files and enable path comments.
+positional arguments:
+  ARG                   Legacy support for positional arguments (directories followed by extensions). Not allowed when using -d or -e.
 
-### Syntax
+options:
+  -h, --help            show this help message and exit
+  -n, --with-line-numbers
+                        Include line numbers for each file.
+  --hidden              Include hidden files and directories (those starting with a dot).
+  -f, --file FILE [FILE ...]
+                        A list of specific files to concatenate.
+  -l, --list            List the files that would be processed, without printing content.
+  -d, --directory DIR [DIR ...]
+                        One or more directories to scan.
+  -e, --extension EXT [EXT ...]
+                        One or more file extensions to include (e.g., 'py', 'js'). Defaults to 'any' if -d is used without -e.
 
-```sh
-pcat [-d DIR]... [EXTS]... [-l FILE]... [-p]
-```
+Examples:
+  # Recommended usage with flags:
+  pcat -d ./src                  # Scan ./src for all file types
+  pcat -d ./src -e py js       # Scan ./src for .py and .js files
+  pcat -d ./src ./lib -e py    # Scan ./src and ./lib for .py files
+  pcat -f ./a.py ./b.sh        # Concatenate a specific list of files
+  pcat -d ./src -e js -f ./c.rs # Combine directory, extension, and file flags
+  pcat -d ./src --hidden         # Include hidden files (dotfiles) in scan
+  pcat -d ./src -e py -n         # Print python files with line numbers
 
-- `-d, --directory DIR`: A directory to scan. Can be used multiple times. Positional arguments that follow are treated as file extensions.
-- `-f, --file FILE`: A list of specific files to concatenate.
-- `-p, --with-paths`: Include file paths as comments at the top of each file's content.
+  # Legacy usage (for backward compatibility):
+  pcat ./src js ts             # Scan ./src for .js and .ts files
 
-### Examples
-
-**1. Scan a Directory for Specific File Types**
-
-To print all `.ts`, `.tsx`, and `.css` files from the `frontend/src` directory:
-
-```bash
-pcat -d ./frontend/src ts tsx css
-```
-
-_Output format:_
-
-```md
-### SOURCE CODE
-
-<file>
-// content of a .ts file
-</file>
-
-<file>
-/* content of a .css file */
-</file>
-
-...
-
-### SOURCE CODE END
-```
-
-**2. Scan Multiple Directories and Add File Paths**
-
-To print all Python (`.py`) files from the `src/` and `tests/` directories, with path comments included, and save to a file:
-
-```bash
-pcat -p -d ./src -d ./tests py > project_context.txt
-```
-
-**3. Concatenate a Specific List of Files**
-
-To print the contents of `a.py` and `b.sh` regardless of their location:
-
-```bash
-pcat -f ./a.py ./b.sh
-```
-
-**4. Combine Directory Scanning and Listed Files**
-
-You can mix and match all options. Here, we scan the `src` directory for `.js` files, add the project's `README.md`, and include path comments for all of them:
-
-```bash
-pcat -p -d ./src js -f ./README.md
 ```

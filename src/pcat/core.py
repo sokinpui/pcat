@@ -65,9 +65,8 @@ class CliParser:
         specific_files = self._validate_files(parsed_args.file)
 
         if directories and not extensions:
-            self.parser.error(
-                "Directories were provided, but no file extensions were specified. Use -e."
-            )
+            # Default to all file types if directories are given but extensions are not.
+            extensions = ["any"]
 
         return PcatConfig(
             directories=directories,
@@ -108,13 +107,16 @@ class CliParser:
         parser = argparse.ArgumentParser(
             description="Concatenate files from specified directories or a list of files.",
             epilog="Examples:\n"
-            "  pcat -d ./src -e py js       # Scan ./src for .py and .js files (recommended)\n"
+            "  # Recommended usage with flags:\n"
+            "  pcat -d ./src                  # Scan ./src for all file types\n"
+            "  pcat -d ./src -e py js       # Scan ./src for .py and .js files\n"
             "  pcat -d ./src ./lib -e py    # Scan ./src and ./lib for .py files\n"
             "  pcat -f ./a.py ./b.sh        # Concatenate a specific list of files\n"
-            "  pcat -d ./src -e js -f ./c.rs # Combine directory, extension, and specific file flags\n"
-            "  pcat ./src js ts             # Legacy syntax: scan ./src for .js and .ts files\n"
-            "  pcat -d ./src -e any --hidden  # Include hidden files (dotfiles) in scan\n"
-            "  pcat -d ./src -e py -n         # Print python files with line numbers",
+            "  pcat -d ./src -e js -f ./c.rs # Combine directory, extension, and file flags\n"
+            "  pcat -d ./src --hidden         # Include hidden files (dotfiles) in scan\n"
+            "  pcat -d ./src -e py -n         # Print python files with line numbers\n\n"
+            "  # Legacy usage (for backward compatibility):\n"
+            "  pcat ./src js ts             # Scan ./src for .js and .ts files",
             formatter_class=argparse.RawTextHelpFormatter,
         )
         parser.add_argument(
@@ -158,7 +160,7 @@ class CliParser:
             action="extend",
             metavar="EXT",
             default=[],
-            help="One or more file extensions to include (e.g., 'py', 'js').",
+            help="One or more file extensions to include (e.g., 'py', 'js'). Defaults to 'any' if -d is used without -e.",
         )
         parser.add_argument(
             "args",
