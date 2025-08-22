@@ -26,48 +26,30 @@ class CliParser:
     def parse(self, cli_args: List[str]) -> PcatConfig:
         """Parses arguments and performs validation, returning a config object."""
         parsed_args = self.parser.parse_args(cli_args)
-
-        has_opts = parsed_args.directory or parsed_args.extension
-        has_legacy_args = parsed_args.args
-        has_files = parsed_args.file
-
-        if not has_opts and not has_legacy_args and not has_files:
+ 
+        if not parsed_args.paths:
             self.parser.print_help(sys.stderr)
             sys.exit(1)
-
-        if has_opts and has_legacy_args:
-            self.parser.error(
-                "Positional arguments for directories/extensions are not allowed when using -d or -e."
-            )
-
-        directories_str: List[str] = []
-        extensions: List[str] = []
-
-        if has_opts:
-            directories_str = parsed_args.directory
-            extensions = parsed_args.extension
-        elif has_legacy_args:
-            # Legacy mode: split positional args into dirs and exts
-            split_index = len(parsed_args.args)
-            for i, arg in enumerate(parsed_args.args):
-                if not Path(arg).is_dir():
-                    split_index = i
-                    break
-            directories_str.extend(parsed_args.args[:split_index])
-            extensions.extend(parsed_args.args[split_index:])
-
-            if not directories_str and extensions:
+ 
+        directories: List[Path] = []
+        specific_files: List[Path] = []
+ 
+        for path_str in parsed_args.paths:
+            path = Path(path_str)
+            if path.is_dir():
+                directories.append(path)
+            elif path.is_file():
+                specific_files.append(path)
+            else:
                 self.parser.error(
-                    f"In legacy mode, the first argument '{parsed_args.args[0]}' is not a directory. Use -d to specify directories."
+                    f"Argument '{path_str}' is not a valid file or directory."
                 )
-
-        directories = self._validate_directories(directories_str)
-        specific_files = self._validate_files(parsed_args.file)
-
+ 
+        extensions = parsed_args.extension
         if directories and not extensions:
             # Default to all file types if directories are given but extensions are not.
             extensions = ["any"]
-
+ 
         return PcatConfig(
             directories=directories,
             extensions=extensions,
@@ -76,48 +58,35 @@ class CliParser:
             with_line_numbers=parsed_args.with_line_numbers,
             list_only=parsed_args.list,
         )
-
-    def _validate_directories(self, dir_paths: List[str]) -> List[Path]:
-        """Validates that directory paths exist and are directories."""
-        validated_paths = []
-        for d_str in dir_paths:
-            d_path = Path(d_str)
-            if not d_path.is_dir():
-                self.parser.error(
-                    f"Directory not found or is not a directory: {d_path}"
-                )
-            validated_paths.append(d_path)
-        return validated_paths
-
-    def _validate_files(self, file_paths: List[str]) -> List[Path]:
-        """Validates that file paths exist and are files."""
-        validated_paths = []
-        for f_str in file_paths:
-            f_path = Path(f_str)
-            if not f_path.is_file():
-                self.parser.error(
-                    f"File specified in --file not found or is not a file: {f_path}"
-                )
-            validated_paths.append(f_path)
-        return validated_paths
-
+ 
     @staticmethod
     def _create_parser() -> argparse.ArgumentParser:
         """Creates and configures the argparse.ArgumentParser instance."""
         parser = argparse.ArgumentParser(
-            description="Concatenate files from specified directories or a list of files.",
+            description="Concatenate and print files from specified paths (files and directories).",
             epilog="Examples:\n"
-            "  # Recommended usage with flags:\n"
-            "  pcat -d ./src                  # Scan ./src for all file types\n"
-            "  pcat -d ./src -e py js       # Scan ./src for .py and .js files\n"
-            "  pcat -d ./src ./lib -e py    # Scan ./src and ./lib for .py files\n"
-            "  pcat -f ./a.py ./b.sh        # Concatenate a specific list of files\n"
-            "  pcat -d ./src -e js -f ./c.rs # Combine directory, extension, and file flags\n"
-            "  pcat -d ./src --hidden         # Include hidden files (dotfiles) in scan\n"
-            "  pcat -d ./src -e py -n         # Print python files with line numbers\n\n"
-            "  # Legacy usage (for backward compatibility):\n"
-            "  pcat ./src js ts             # Scan ./src for .js and .ts files",
+            "  pcat ./src ./README.md    # Process all files in ./src and the specific file\n"
+            "  pcat ./src -e py js       # Process .py and .js files in ./src\n"
+            "  pcat file1.txt file2.txt  # Concatenate specific files\n"
+            "  pcat . --hidden           # Process all files in current dir, including hidden ones\n"
+            "  pcat ./src -e py -n       # Print python files from ./src with line numbers\n"
+            "  pcat ./src --list         # List files that would be processed in ./src",
             formatter_class=argparse.RawTextHelpFormatter,
+        )
+        parser.add_argument(
+            "paths",
+            nargs="*",
+            metavar="PATH",
+            help="A list of files and/or directories to process.",
+        )
+        parser.add_argument(
+            "-e",
+            "--extension",
+            nargs="+",
+            action="extend",
+            metavar="EXT",
+            default=[],
+            help="Filter by file extensions (e.g., 'py', 'js'). Applies to directories.",
         )
         parser.add_argument(
             "-n",
@@ -131,42 +100,10 @@ class CliParser:
             help="Include hidden files and directories (those starting with a dot).",
         )
         parser.add_argument(
-            "-f",
-            "--file",
-            nargs="+",
-            metavar="FILE",
-            default=[],
-            help="A list of specific files to concatenate.",
-        )
-        parser.add_argument(
             "-l",
             "--list",
             action="store_true",
             help="List the files that would be processed, without printing content.",
-        )
-        parser.add_argument(
-            "-d",
-            "--directory",
-            nargs="+",
-            action="extend",
-            metavar="DIR",
-            default=[],
-            help="One or more directories to scan.",
-        )
-        parser.add_argument(
-            "-e",
-            "--extension",
-            nargs="+",
-            action="extend",
-            metavar="EXT",
-            default=[],
-            help="One or more file extensions to include (e.g., 'py', 'js'). Defaults to 'any' if -d is used without -e.",
-        )
-        parser.add_argument(
-            "args",
-            nargs="*",
-            metavar="ARG",
-            help="Legacy support for positional arguments (directories followed by extensions). Not allowed when using -d or -e.",
         )
         return parser
 
