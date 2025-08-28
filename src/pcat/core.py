@@ -30,15 +30,20 @@ class CliParser:
     def parse(self, cli_args: List[str]) -> PcatConfig:
         """Parses arguments and performs validation, returning a config object."""
         parsed_args = self.parser.parse_args(cli_args)
- 
-        if not parsed_args.paths:
+
+        path_strs = parsed_args.paths
+        if not path_strs and not sys.stdin.isatty():
+            # If no paths are given and we're in a pipe, read from stdin.
+            path_strs = [line.strip() for line in sys.stdin if line.strip()]
+
+        if not path_strs:
             self.parser.print_help(sys.stderr)
             sys.exit(1)
  
         directories: List[Path] = []
         specific_files: List[Path] = []
  
-        for path_str in parsed_args.paths:
+        for path_str in path_strs:
             path = Path(path_str)
             if path.is_dir():
                 directories.append(path)
@@ -77,15 +82,17 @@ class CliParser:
             "  pcat . --hidden           # Process all files in current dir, including hidden ones\n"
             "  pcat ./src -e py -n       # Print python files from ./src with line numbers\n"
             "  pcat ./src --list         # List files that would be processed in ./src\n"
-            "  pcat ./src --not '.*test.*' # Exclude files with 'test' in their path\n"
-            "  pcat ./src -c              # Copy content of files in ./src to clipboard",
+            "  pcat ./src --not '*_test.py' '*/gen/*' # Exclude test files and generated code\n"
+            "  pcat ./src -c              # Copy content of files in ./src to clipboard\n"
+            "  fd . -e py | pcat         # Process python files found by fd from stdin",
             formatter_class=argparse.RawTextHelpFormatter,
         )
         parser.add_argument(
             "paths",
             nargs="*",
             metavar="PATH",
-            help="A list of files and/or directories to process.",
+            help="A list of files and/or directories to process. "
+            "If not provided, paths are read from stdin.",
         )
         parser.add_argument(
             "-e",
@@ -102,7 +109,7 @@ class CliParser:
             nargs="+",
             metavar="PATTERN",
             default=[],
-            help="Exclude files matching glob patterns (e.g., '*/__pycache__/*').",
+            help="Exclude files matching glob patterns against the full path (e.g., '*/__pycache__/*').",
         )
         parser.add_argument(
             "-n",
