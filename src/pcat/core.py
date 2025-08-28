@@ -1,5 +1,6 @@
 # src/pcat/core.py
 import argparse
+import fnmatch
 import re
 import sys
 from dataclasses import dataclass, field
@@ -101,7 +102,7 @@ class CliParser:
             nargs="+",
             metavar="PATTERN",
             default=[],
-            help="Exclude files matching the given regex patterns.",
+            help="Exclude files matching glob patterns (e.g., '*/__pycache__/*').",
         )
         parser.add_argument(
             "-n",
@@ -252,14 +253,17 @@ class Pcat:
         if not self.config.exclude_patterns:
             return files
 
+        exclude_regexes = [
+            re.compile(fnmatch.translate(pattern))
+            for pattern in self.config.exclude_patterns
+        ]
+
         filtered_files = []
         for file_path in files:
             # Use as_posix() for consistent path separators in regex.
             path_str = file_path.as_posix()
-            if not any(
-                re.search(pattern, path_str)
-                for pattern in self.config.exclude_patterns
-            ):
+            # fnmatch.translate creates a regex for matching the whole string.
+            if not any(regex.match(path_str) for regex in exclude_regexes):
                 filtered_files.append(file_path)
         return filtered_files
 
