@@ -1,5 +1,6 @@
 # src/pcat/core.py
 import argparse
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,9 +13,11 @@ class PcatConfig:
     directories: List[Path] = field(default_factory=list)
     extensions: List[str] = field(default_factory=list)
     specific_files: List[Path] = field(default_factory=list)
+    exclude_patterns: List[str] = field(default_factory=list)
     with_line_numbers: bool = False
     hidden: bool = False
     list_only: bool = False
+    to_clipboard: bool = False
 
 
 class CliParser:
@@ -54,9 +57,11 @@ class CliParser:
             directories=directories,
             extensions=extensions,
             specific_files=specific_files,
+            exclude_patterns=parsed_args.exclude_patterns,
             hidden=parsed_args.hidden,
             with_line_numbers=parsed_args.with_line_numbers,
             list_only=parsed_args.list,
+            to_clipboard=parsed_args.clipboard,
         )
  
     @staticmethod
@@ -70,7 +75,9 @@ class CliParser:
             "  pcat file1.txt file2.txt  # Concatenate specific files\n"
             "  pcat . --hidden           # Process all files in current dir, including hidden ones\n"
             "  pcat ./src -e py -n       # Print python files from ./src with line numbers\n"
-            "  pcat ./src --list         # List files that would be processed in ./src",
+            "  pcat ./src --list         # List files that would be processed in ./src\n"
+            "  pcat ./src --not '.*test.*' # Exclude files with 'test' in their path\n"
+            "  pcat ./src -c              # Copy content of files in ./src to clipboard",
             formatter_class=argparse.RawTextHelpFormatter,
         )
         parser.add_argument(
@@ -89,6 +96,14 @@ class CliParser:
             help="Filter by file extensions (e.g., 'py', 'js'). Applies to directories.",
         )
         parser.add_argument(
+            "--not",
+            dest="exclude_patterns",
+            nargs="+",
+            metavar="PATTERN",
+            default=[],
+            help="Exclude files matching the given regex patterns.",
+        )
+        parser.add_argument(
             "-n",
             "--with-line-numbers",
             action="store_true",
@@ -104,6 +119,12 @@ class CliParser:
             "--list",
             action="store_true",
             help="List the files that would be processed, without printing content.",
+        )
+        parser.add_argument(
+            "-c",
+            "--clipboard",
+            action="store_true",
+            help="Copy the output to the clipboard instead of printing to stdout.",
         )
         return parser
 
@@ -218,11 +239,29 @@ class Pcat:
             directory_files + self.config.specific_files
         )
 
+        all_files = self._filter_excluded(all_files)
+
         if self.config.list_only:
             return "\n".join(map(str, all_files)) + ("\n" if all_files else "")
 
         formatter = OutputFormatter(self.config)
         return formatter.format(all_files)
+
+    def _filter_excluded(self, files: List[Path]) -> List[Path]:
+        """Filters out files that match any of the exclusion patterns."""
+        if not self.config.exclude_patterns:
+            return files
+
+        filtered_files = []
+        for file_path in files:
+            # Use as_posix() for consistent path separators in regex.
+            path_str = file_path.as_posix()
+            if not any(
+                re.search(pattern, path_str)
+                for pattern in self.config.exclude_patterns
+            ):
+                filtered_files.append(file_path)
+        return filtered_files
 
     @staticmethod
     def _deduplicate_files(files: List[Path]) -> List[Path]:
