@@ -11,6 +11,7 @@ from typing import List, Set, TextIO
 @dataclass(frozen=True)
 class PcatConfig:
     """Immutable configuration for the pcat tool."""
+
     directories: List[Path] = field(default_factory=list)
     extensions: List[str] = field(default_factory=list)
     specific_files: List[Path] = field(default_factory=list)
@@ -39,10 +40,10 @@ class CliParser:
         if not path_strs:
             self.parser.print_help(sys.stderr)
             sys.exit(1)
- 
+
         directories: List[Path] = []
         specific_files: List[Path] = []
- 
+
         for path_str in path_strs:
             path = Path(path_str)
             if path.is_dir():
@@ -53,12 +54,12 @@ class CliParser:
                 self.parser.error(
                     f"Argument '{path_str}' is not a valid file or directory."
                 )
- 
+
         extensions = parsed_args.extension
         if directories and not extensions:
             # Default to all file types if directories are given but extensions are not.
             extensions = ["any"]
- 
+
         return PcatConfig(
             directories=directories,
             extensions=extensions,
@@ -69,7 +70,7 @@ class CliParser:
             list_only=parsed_args.list,
             to_clipboard=parsed_args.clipboard,
         )
- 
+
     @staticmethod
     def _create_parser() -> argparse.ArgumentParser:
         """Creates and configures the argparse.ArgumentParser instance."""
@@ -196,14 +197,14 @@ class OutputFormatter:
         if not files:
             return ""
 
-        output_parts = ["### SOURCE CODE ###\n\n"]
+        output_parts = ["# PROVIED DOCUMENTS \n\n"]
         for file_path in files:
             self._format_file(file_path, output_parts, writer)
 
         if len(output_parts) > 1:
             if output_parts[-1].endswith("\n\n"):
                 output_parts[-1] = output_parts[-1][:-1]
-            output_parts.append("\n### SOURCE CODE END ###\n")
+            output_parts.append("\n---\n")
 
         return "".join(output_parts)
 
